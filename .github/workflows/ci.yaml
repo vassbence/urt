@@ -1,0 +1,17 @@
+name: continuous integration
+on: [push]
+jobs:
+  build:
+    name: build, test and upload artifacts
+    runs-on: ubuntu-24.04-arm
+    container: arm64v8/amazonlinux:2023
+    steps:
+      - run: dnf install -y git tar gzip make cmake gcc gcc-c++
+      - uses: actions/checkout@v7
+      - run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build
+      - run: ctest --test-dir build --output-on-failure
+      - uses: actions/upload-artifact@v7
+        with:
+          name: example
+          path: build/example/bootstrap
