@@ -35,7 +35,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE urt)
 
 int main() {
   urt::run([](std::string_view event) -> std::string {
-    return "{\"message:\":\"hello, world\"}";
+    return "{\"message:\":\"hello, world!\"}";
   });
 }
 ```
