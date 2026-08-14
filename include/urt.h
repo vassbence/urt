@@ -45,6 +45,7 @@ inline constexpr std::string_view transfer_encoding = "Transfer-Encoding";
 namespace content_type {
 inline constexpr std::string_view text = "text/plain";
 inline constexpr std::string_view json = "application/json";
+inline constexpr std::string_view binary = "application/octet-stream";
 } // namespace content_type
 } // namespace http
 
@@ -150,19 +151,9 @@ build_error_response_path_and_body(
 } // namespace urt::detail
 
 namespace urt {
-struct event {
-  std::string_view payload;
-};
-
-struct response {
-  std::string payload;
-  std::string_view content_type;
-};
-
-template <
-    typename Fn,
-    typename = std::enable_if_t<std::is_same_v<
-        decltype(&Fn::operator()), response (Fn::*)(const event &) const>>>
+template <typename Fn, typename = std::enable_if_t<std::is_same_v<
+                           decltype(&Fn::operator()),
+                           std::string (Fn::*)(std::string_view) const>>>
 void run(Fn fn);
 }; // namespace urt
 
@@ -260,7 +251,7 @@ inline urt::detail::http::request::request(
   std::memcpy(buffer.data() + n, crlf.data(), crlf.size());
   n += crlf.size();
 
-  if (method != http::method::get) {
+  if (!body.empty()) {
     // Content-Length: {CALCULATED_CONTENT_LENGTH}\r\n
     std::memcpy(buffer.data() + n, http::header::content_length.data(),
                 http::header::content_length.size());
@@ -276,7 +267,9 @@ inline urt::detail::http::request::request(
     n = static_cast<size_t>(ptr - reinterpret_cast<char *>(buffer.data()));
     std::memcpy(buffer.data() + n, crlf.data(), crlf.size());
     n += crlf.size();
+  }
 
+  if (!content_type.empty()) {
     // Content-Type: {CONTENT_TYPE}\r\n
     std::memcpy(buffer.data() + n, http::header::content_type.data(),
                 http::header::content_type.size());
@@ -577,12 +570,15 @@ template <typename Fn, typename> void urt::run(Fn fn) {
       parsed_aws_lambda_runtime_api_address);
 
   for (;;) {
+    // as per
+    // https://docs.aws.amazon.com/lambda/latest/dg/runtimes-api.html#runtimes-api-next
     detail::http::response get_next_invocation_response =
         detail::http::fetch(buffer, aws_lambda_runtime_api_connection.socket,
                             detail::http::method::get,
                             detail::aws::lambda::api::next_invocation_path,
                             aws_lambda_runtime_api_address);
     ENSURES(get_next_invocation_response.status == 200);
+    ENSURES(!get_next_invocation_response.body.empty());
 
     std::string_view request_id;
     for (size_t i = 0; i < get_next_invocation_response.headers_size; ++i) {
@@ -594,21 +590,18 @@ template <typename Fn, typename> void urt::run(Fn fn) {
     }
     ENSURES(!request_id.empty());
 
-    const event event{get_next_invocation_response.body};
-    ENSURES(!event.payload.empty());
-
     try {
-      const response response = fn(event);
+      const std::string response = fn(get_next_invocation_response.body);
 
       // as per
-      // https://docs.aws.amazon.com/lambda/latest/dg/runtimes-api.html#runtimes-api-next
+      // https://docs.aws.amazon.com/lambda/latest/dg/runtimes-api.html#runtimes-api-response
       detail::http::response post_invocation_outcome_response =
           detail::http::fetch(
               buffer, aws_lambda_runtime_api_connection.socket,
               detail::http::method::post,
               detail::build_success_response_path(response_buffer, request_id),
-              aws_lambda_runtime_api_address, response.payload,
-              response.content_type);
+              aws_lambda_runtime_api_address, response,
+              detail::http::content_type::binary);
       ENSURES(post_invocation_outcome_response.status == 202);
     } catch (const std::exception &exception) {
       // as per
