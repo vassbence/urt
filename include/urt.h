@@ -45,6 +45,7 @@ inline constexpr std::string_view transfer_encoding = "Transfer-Encoding";
 namespace content_type {
 inline constexpr std::string_view text = "text/plain";
 inline constexpr std::string_view json = "application/json";
+inline constexpr std::string_view binary = "application/octet-stream";
 } // namespace content_type
 } // namespace http
 
@@ -599,7 +600,8 @@ template <typename Fn, typename> void urt::run(Fn fn) {
               buffer, aws_lambda_runtime_api_connection.socket,
               detail::http::method::post,
               detail::build_success_response_path(response_buffer, request_id),
-              aws_lambda_runtime_api_address, response);
+              aws_lambda_runtime_api_address, response,
+              detail::http::content_type::binary);
       ENSURES(post_invocation_outcome_response.status == 202);
     } catch (const std::exception &exception) {
       // as per
