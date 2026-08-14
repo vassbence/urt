@@ -1,6 +1,9 @@
 #include <sstream>
 #include <urt.h>
 
+// This AWS Lambda function expects an API Gateway event and echoes it back
+// inside the body of an API Gateway response
+
 std::string escape_json(std::string_view value) {
   std::string result;
   for (char c : value) {
