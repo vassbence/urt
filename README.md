@@ -31,19 +31,11 @@ target_link_libraries(${PROJECT_NAME} PRIVATE urt)
 ## Usage
 
 ```c++
-#include <sstream>
 #include <urt.h>
 
 int main() {
   urt::run([](std::string_view event) {
-    std::ostringstream response;
-    response << "{\n"
-             << "\"statusCode\": 200,\n"
-             << "\"headers\": { \"Content-Type\": \"application/json\" },\n"
-             << "\"isBase64Encoded\": false,\n"
-             << "\"body\": \"" << event << "\"\n"
-             << "}";
-    return response.str();
+    return "{\"message:\":\"hello, world\"}";
   });
 }
 ```
