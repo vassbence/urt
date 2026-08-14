@@ -39,39 +39,32 @@ struct can_be_passed_to_run<T,
 class run_test : public server_fixture {};
 
 TEST_F(run_test, accepts_valid_fn_signatures) {
-  auto valid_lambda = [](const urt::event &) { return urt::response{}; };
+  auto valid_lambda = [](std::string_view) { return std::string{}; };
   EXPECT_TRUE(can_be_passed_to_run<decltype(valid_lambda)>::value);
 
   struct ValidFunctor {
-    urt::response operator()(const urt::event &) const {
-      return urt::response{};
-    }
+    std::string operator()(std::string_view) const { return std::string{}; }
   };
   EXPECT_TRUE(can_be_passed_to_run<ValidFunctor>::value);
 }
 
 TEST_F(run_test, denies_invalid_fn_signautes) {
-  auto mutable_lambda = [](const urt::event &) mutable {
-    return urt::response{};
-  };
+  auto mutable_lambda = [](std::string_view) mutable { return std::string{}; };
   EXPECT_FALSE(can_be_passed_to_run<decltype(mutable_lambda)>::value);
 
-  auto non_const_param = [](urt::event &) { return urt::response{}; };
-  EXPECT_FALSE(can_be_passed_to_run<decltype(non_const_param)>::value);
-
-  auto wrong_return = [](const urt::event &) { return 0; };
+  auto wrong_return = [](std::string_view) { return 0; };
   EXPECT_FALSE(can_be_passed_to_run<decltype(wrong_return)>::value);
 
-  auto wrong_param = [](int) { return urt::response{}; };
+  auto wrong_param = [](int) { return std::string{}; };
   EXPECT_FALSE(can_be_passed_to_run<decltype(wrong_param)>::value);
 
-  auto generic_lambda = [](const auto &) { return urt::response{}; };
+  auto generic_lambda = [](const auto &) { return std::string{}; };
   EXPECT_FALSE(can_be_passed_to_run<decltype(generic_lambda)>::value);
 }
 
 TEST_F(run_test, expects_aws_lambda_runtime_api_address) {
   EXPECT_DEATH(
-      { urt::run([](const urt::event &) { return urt::response{}; }); }, ".*");
+      { urt::run([](std::string_view) { return std::string{}; }); }, ".*");
 }
 
 TEST_F(run_test, expects_correct_length_aws_lambda_runtime_api_address) {
@@ -80,7 +73,7 @@ TEST_F(run_test, expects_correct_length_aws_lambda_runtime_api_address) {
          overly_long_address.c_str(), 1);
 
   EXPECT_DEATH(
-      { urt::run([](const urt::event &) { return urt::response{}; }); }, ".*");
+      { urt::run([](std::string_view) { return std::string{}; }); }, ".*");
 }
 
 TEST_F(run_test, ensures_request_id_header_is_present) {
@@ -94,7 +87,7 @@ TEST_F(run_test, ensures_request_id_header_is_present) {
                    });
 
   EXPECT_DEATH(
-      { urt::run([](const urt::event &) { return urt::response{}; }); }, ".*");
+      { urt::run([](std::string_view) { return std::string{}; }); }, ".*");
 }
 
 TEST_F(run_test, ensures_event_payload_is_not_empty) {
@@ -108,7 +101,7 @@ TEST_F(run_test, ensures_event_payload_is_not_empty) {
                    });
 
   EXPECT_DEATH(
-      { urt::run([](const urt::event &) { return urt::response{}; }); }, ".*");
+      { urt::run([](std::string_view) { return std::string{}; }); }, ".*");
 }
 
 TEST_F(run_test, handles_successful_handler_response) {
@@ -130,9 +123,9 @@ TEST_F(run_test, handles_successful_handler_response) {
 
   EXPECT_DEATH(
       {
-        urt::run([](const urt::event &evt) {
-          EXPECT_EQ(evt.payload, "{\"event\":\"hello\"}");
-          return urt::response{"{\"status\":\"success\"}", "application/json"};
+        urt::run([](std::string_view event) {
+          EXPECT_EQ(event, "{\"event\":\"hello\"}");
+          return std::string{"{\"status\":\"success\"}"};
         });
       },
       ".*");
@@ -159,7 +152,7 @@ TEST_F(run_test, reports_handler_thrown_error) {
 
   EXPECT_DEATH(
       {
-        urt::run([](const urt::event &) -> urt::response {
+        urt::run([](std::string_view) -> std::string {
           throw std::runtime_error("foo");
         });
       },

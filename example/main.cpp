@@ -1,7 +1,10 @@
+#include <format>
 #include <urt.h>
 
 int main() {
-  urt::run([](const urt::event &event) {
-    return urt::response{std::string(event.payload), "application/json"};
+  urt::run([](std::string_view event) {
+    return std::format(
+        R"({{ "statusCode": 200, "headers": {{ "Content-Type": "application/json" }}, "isBase64Encoded": false, "body": "{}" }})",
+        event);
   });
 }
