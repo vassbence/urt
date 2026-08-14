@@ -20,7 +20,7 @@ std::string escape_json(std::string_view value) {
 }
 
 int main() {
-  urt::run([](std::string_view event) {
+  urt::run([](std::string_view event) -> std::string {
     std::ostringstream response;
     response << "{\n"
              << "\"statusCode\": 200,\n"
