@@ -569,6 +569,8 @@ template <typename Fn, typename> void urt::run(Fn fn) {
       parsed_aws_lambda_runtime_api_address);
 
   for (;;) {
+    // as per
+    // https://docs.aws.amazon.com/lambda/latest/dg/runtimes-api.html#runtimes-api-next
     detail::http::response get_next_invocation_response =
         detail::http::fetch(buffer, aws_lambda_runtime_api_connection.socket,
                             detail::http::method::get,
@@ -591,7 +593,7 @@ template <typename Fn, typename> void urt::run(Fn fn) {
       const std::string response = fn(get_next_invocation_response.body);
 
       // as per
-      // https://docs.aws.amazon.com/lambda/latest/dg/runtimes-api.html#runtimes-api-next
+      // https://docs.aws.amazon.com/lambda/latest/dg/runtimes-api.html#runtimes-api-response
       detail::http::response post_invocation_outcome_response =
           detail::http::fetch(
               buffer, aws_lambda_runtime_api_connection.socket,
