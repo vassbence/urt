@@ -8,7 +8,7 @@ jobs:
     steps:
       - run: dnf install -y git tar gzip make cmake gcc14 gcc14-c++
       - uses: actions/checkout@v7
-      - run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=gcc14 -DCMAKE_CXX_COMPILER=g++14
+      - run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=gcc14-gcc -DCMAKE_CXX_COMPILER=gcc14-g++
       - run: cmake --build build
       - run: ctest --test-dir build --output-on-failure
       - uses: actions/upload-artifact@v7
