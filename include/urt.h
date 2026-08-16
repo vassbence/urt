@@ -17,7 +17,8 @@
 #include <unistd.h>
 #include <utility>
 
-namespace urt::detail {
+namespace urt {
+namespace detail {
 inline constexpr size_t receive_chunk_bytes = 64 * 1024;
 inline constexpr std::string_view colon = ":";
 inline constexpr std::string_view crlf = "\r\n";
@@ -43,7 +44,6 @@ inline constexpr std::string_view transfer_encoding = "Transfer-Encoding";
 } // namespace header
 
 namespace content_type {
-inline constexpr std::string_view text = "text/plain";
 inline constexpr std::string_view json = "application/json";
 inline constexpr std::string_view binary = "application/octet-stream";
 } // namespace content_type
@@ -75,35 +75,33 @@ inline constexpr size_t response_buffer_bytes =
 } // namespace aws::lambda
 
 struct address {
+  explicit address(std::string_view authority);
+
   // address as uri authority parts
   std::string_view host;
   uint16_t port;
-
   // address converted to network address
   sockaddr_in network_address;
-
-  explicit address(std::string_view authority);
 };
 
 struct connection {
-  int32_t socket;
-
   explicit connection(const address &address);
-
   ~connection();
+
+  int32_t socket;
 };
 
 namespace http {
 // has a separate field for head and body to avoid double
 // buffering the body
 struct request {
-  std::string_view head;
-  std::string_view body;
-
   explicit request(
       std::array<std::byte, aws::lambda::payload::max_bytes> &buffer,
       std::string_view method, std::string_view path, std::string_view host,
       std::string_view body = {}, std::string_view content_type = {});
+
+  std::string_view head;
+  std::string_view body;
 };
 
 void send_request(int32_t socket, const request &request);
@@ -137,9 +135,7 @@ response
 receive_response(std::array<std::byte, aws::lambda::payload::max_bytes> &buffer,
                  int32_t socket);
 }; // namespace http
-}; // namespace urt::detail
 
-namespace urt::detail {
 std::string_view build_success_response_path(
     std::array<std::byte, aws::lambda::api::response_buffer_bytes> &buffer,
     std::string_view request_id);
@@ -148,30 +144,25 @@ std::pair<std::string_view, std::string_view>
 build_error_response_path_and_body(
     std::array<std::byte, aws::lambda::api::response_buffer_bytes> &buffer,
     std::string_view request_id, std::string_view error);
-} // namespace urt::detail
+}; // namespace detail
 
-namespace urt {
-template <typename Fn, typename = std::enable_if_t<std::is_same_v<
-                           decltype(&Fn::operator()),
-                           std::string (Fn::*)(std::string_view) const>>>
-void run(Fn fn);
+template <typename T> void run(T t);
 }; // namespace urt
 
-// as per https://github.com/microsoft/GSL/blob/main/include/gsl/assert,
-// https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#i6-prefer-expects-for-expressing-preconditions
-#define EXPECTS(x)                                                             \
-  (__builtin_expect(!!(x), 1) ? static_cast<void>(0) : std::terminate())
-#define ENSURES(x)                                                             \
-  (__builtin_expect(!!(x), 1) ? static_cast<void>(0) : std::terminate())
+inline void ensure(bool condition) {
+  if (__builtin_expect(!condition, 0)) {
+    std::terminate();
+  }
+}
 
 inline urt::detail::connection::connection(const address &address) {
   socket = ::socket(AF_INET, SOCK_STREAM, 0);
-  ENSURES(socket != -1);
+  ensure(socket != -1);
 
   int32_t connect_result = connect(
       socket, reinterpret_cast<const sockaddr *>(&address.network_address),
       sizeof(address.network_address));
-  ENSURES(connect_result != -1);
+  ensure(connect_result != -1);
 };
 
 inline urt::detail::connection::~connection() {
@@ -181,7 +172,7 @@ inline urt::detail::connection::~connection() {
 }
 
 inline urt::detail::address::address(std::string_view authority) {
-  EXPECTS(authority.size() > 0);
+  ensure(authority.size() > 0);
 
   size_t colon_position = authority.find(colon);
   port = 80;
@@ -195,7 +186,7 @@ inline urt::detail::address::address(std::string_view authority) {
   host = authority.substr(0, colon_position);
   // smaller than operator because INET_ADDRSTRLEN is 16 (IPv4 has
   // a max size of 15 + 1 null terminator character)
-  EXPECTS(host.size() < INET_ADDRSTRLEN);
+  ensure(host.size() < INET_ADDRSTRLEN);
   std::array<char, INET_ADDRSTRLEN> null_terminated_host;
   std::memcpy(null_terminated_host.data(), host.data(), host.size());
   null_terminated_host[host.size()] = '\0';
@@ -206,20 +197,20 @@ inline urt::detail::address::address(std::string_view authority) {
 
   int32_t inet_conversion_result = inet_pton(
       AF_INET, null_terminated_host.data(), &network_address.sin_addr);
-  ENSURES(inet_conversion_result == 1);
+  ensure(inet_conversion_result == 1);
 };
 
 inline urt::detail::http::request::request(
     std::array<std::byte, aws::lambda::payload::max_bytes> &buffer,
     std::string_view method, std::string_view path, std::string_view host,
     std::string_view body, std::string_view content_type) {
-  EXPECTS(!method.empty());
-  EXPECTS(!path.empty());
-  EXPECTS(!host.empty());
-  EXPECTS((method == http::method::get && body.empty()) ||
-          (method != http::method::get && !body.empty()));
-  EXPECTS((method == http::method::get && content_type.empty()) ||
-          (method != http::method::get && !content_type.empty()));
+  ensure(!method.empty());
+  ensure(!path.empty());
+  ensure(!host.empty());
+  ensure((method == http::method::get && body.empty()) ||
+         (method != http::method::get && !body.empty()));
+  ensure((method == http::method::get && content_type.empty()) ||
+         (method != http::method::get && !content_type.empty()));
 
   size_t n = 0;
 
@@ -263,7 +254,7 @@ inline urt::detail::http::request::request(
     auto [ptr, ec] = std::to_chars(
         reinterpret_cast<char *>(buffer.data() + n),
         reinterpret_cast<char *>(buffer.data() + buffer.size()), body.size());
-    ENSURES(ec == std::errc{});
+    ensure(ec == std::errc{});
     n = static_cast<size_t>(ptr - reinterpret_cast<char *>(buffer.data()));
     std::memcpy(buffer.data() + n, crlf.data(), crlf.size());
     n += crlf.size();
@@ -295,7 +286,7 @@ inline urt::detail::http::request::request(
 inline urt::detail::http::response urt::detail::http::receive_response(
     std::array<std::byte, aws::lambda::payload::max_bytes> &buffer,
     int32_t socket) {
-  EXPECTS(socket > -1);
+  ensure(socket > -1);
 
   parser_state state = parser_state::status;
   size_t head = 0;
@@ -453,19 +444,19 @@ inline urt::detail::http::response urt::detail::http::receive_response(
 
 inline void urt::detail::http::send_request(int32_t socket,
                                             const request &request) {
-  EXPECTS(socket > -1);
+  ensure(socket > -1);
 
   for (size_t i = 0; i < request.head.size();) {
     ssize_t n = send(socket, request.head.data() + i, request.head.size() - i,
                      MSG_NOSIGNAL);
-    ENSURES(n != -1);
+    ensure(n != -1);
     i += static_cast<size_t>(n);
   }
 
   for (size_t i = 0; i < request.body.size();) {
     ssize_t n = send(socket, request.body.data() + i, request.body.size() - i,
                      MSG_NOSIGNAL);
-    ENSURES(n != -1);
+    ensure(n != -1);
     i += static_cast<size_t>(n);
   }
 };
@@ -552,33 +543,32 @@ inline urt::detail::http::response urt::detail::http::fetch(
   return receive_response(buffer, socket);
 };
 
-template <typename Fn, typename> void urt::run(Fn fn) {
-  const char *aws_lambda_runtime_api_address =
+template <typename T> void urt::run(T t) {
+  static_assert(std::is_same_v<decltype(&T::operator()),
+                               std::string (T::*)(std::string_view) const>);
+
+  const char *raw_api_address =
       std::getenv(detail::aws::lambda::api::env_var.data());
-  EXPECTS(aws_lambda_runtime_api_address != nullptr);
-  EXPECTS(strlen(aws_lambda_runtime_api_address) <=
-          detail::http::max_supported_host_bytes);
+  ensure(raw_api_address != nullptr);
+
+  std::string_view api_address{raw_api_address};
+  ensure(api_address.size() <= detail::http::max_supported_host_bytes);
 
   std::array<std::byte, detail::aws::lambda::payload::max_bytes> buffer;
   std::array<std::byte, detail::aws::lambda::api::response_buffer_bytes>
       response_buffer;
 
-  detail::address parsed_aws_lambda_runtime_api_address(
-      (std::string_view(aws_lambda_runtime_api_address)));
-
-  detail::connection aws_lambda_runtime_api_connection(
-      parsed_aws_lambda_runtime_api_address);
+  detail::address parsed_addrress{api_address};
+  detail::connection connection{parsed_addrress};
 
   for (;;) {
     // as per
     // https://docs.aws.amazon.com/lambda/latest/dg/runtimes-api.html#runtimes-api-next
-    detail::http::response get_next_invocation_response =
-        detail::http::fetch(buffer, aws_lambda_runtime_api_connection.socket,
-                            detail::http::method::get,
-                            detail::aws::lambda::api::next_invocation_path,
-                            aws_lambda_runtime_api_address);
-    ENSURES(get_next_invocation_response.status == 200);
-    ENSURES(!get_next_invocation_response.body.empty());
+    auto get_next_invocation_response = detail::http::fetch(
+        buffer, connection.socket, detail::http::method::get,
+        detail::aws::lambda::api::next_invocation_path, api_address);
+    ensure(get_next_invocation_response.status == 200);
+    ensure(!get_next_invocation_response.body.empty());
 
     std::string_view request_id;
     for (size_t i = 0; i < get_next_invocation_response.headers_size; ++i) {
@@ -588,33 +578,28 @@ template <typename Fn, typename> void urt::run(Fn fn) {
         break;
       }
     }
-    ENSURES(!request_id.empty());
+    ensure(!request_id.empty());
 
     try {
-      const std::string response = fn(get_next_invocation_response.body);
+      const std::string response = t(get_next_invocation_response.body);
 
       // as per
       // https://docs.aws.amazon.com/lambda/latest/dg/runtimes-api.html#runtimes-api-response
-      detail::http::response post_invocation_outcome_response =
-          detail::http::fetch(
-              buffer, aws_lambda_runtime_api_connection.socket,
-              detail::http::method::post,
-              detail::build_success_response_path(response_buffer, request_id),
-              aws_lambda_runtime_api_address, response,
-              detail::http::content_type::binary);
-      ENSURES(post_invocation_outcome_response.status == 202);
+      auto post_invocation_outcome_response = detail::http::fetch(
+          buffer, connection.socket, detail::http::method::post,
+          detail::build_success_response_path(response_buffer, request_id),
+          api_address, response, detail::http::content_type::binary);
+      ensure(post_invocation_outcome_response.status == 202);
     } catch (const std::exception &exception) {
       // as per
       // https://docs.aws.amazon.com/lambda/latest/dg/runtimes-api.html#runtimes-api-invokeerror
       const auto &[path, body] = detail::build_error_response_path_and_body(
           response_buffer, request_id, exception.what());
 
-      detail::http::response post_invocation_error_response =
-          detail::http::fetch(buffer, aws_lambda_runtime_api_connection.socket,
-                              detail::http::method::post, path,
-                              aws_lambda_runtime_api_address, body,
-                              detail::http::content_type::json);
-      ENSURES(post_invocation_error_response.status == 202);
+      auto post_invocation_error_response = detail::http::fetch(
+          buffer, connection.socket, detail::http::method::post, path,
+          api_address, body, detail::http::content_type::json);
+      ensure(post_invocation_error_response.status == 202);
     }
   };
 }

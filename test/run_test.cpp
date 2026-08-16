@@ -31,9 +31,9 @@ template <typename T, typename = void>
 struct can_be_passed_to_run : std::false_type {};
 
 template <typename T>
-struct can_be_passed_to_run<T,
-                            std::void_t<decltype(urt::run(std::declval<T>()))>>
-    : std::true_type {};
+struct can_be_passed_to_run<T, std::void_t<decltype(&T::operator())>>
+    : std::is_same<decltype(&T::operator()),
+                   std::string (T::*)(std::string_view) const> {};
 } // namespace
 
 class run_test : public server_fixture {};
