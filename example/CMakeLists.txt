@@ -7,7 +7,7 @@ if(NOT TARGET urt)
     FetchContent_Declare(
             urt
             GIT_REPOSITORY https://github.com/vassbence/urt.git
-            GIT_TAG v0.2.0
+            GIT_TAG v0.3.0
     )
     FetchContent_MakeAvailable(urt)
 endif()
